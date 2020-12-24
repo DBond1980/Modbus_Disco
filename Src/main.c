@@ -52,14 +52,13 @@
 #include "cmsis_os.h"
 
 /* USER CODE BEGIN Includes */
+#include "MB_HW.h"
 
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
 
 CRC_HandleTypeDef hcrc;
-
-ETH_HandleTypeDef heth;
 
 RNG_HandleTypeDef hrng;
 
@@ -72,8 +71,6 @@ DMA_HandleTypeDef hdma_usart6_rx;
 DMA_HandleTypeDef hdma_usart6_tx;
 
 osThreadId defaultTaskHandle;
-osThreadId NetTaskHandle;
-osThreadId LinkTastHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -88,11 +85,8 @@ static void MX_CRC_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_TIM5_Init(void);
 static void MX_SPI2_Init(void);
-static void MX_ETH_Init(void);
 static void MX_RNG_Init(void);
 void StartDefaultTask(void const * argument);
-void StartNet(void const * argument);
-void StartLinkTast(void const * argument);
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -100,7 +94,7 @@ void StartLinkTast(void const * argument);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-
+MB_HW_HandleTypeDef mb_hw;
 /* USER CODE END 0 */
 
 /**
@@ -137,10 +131,16 @@ int main(void)
   MX_USART6_UART_Init();
   MX_TIM5_Init();
   MX_SPI2_Init();
-  MX_ETH_Init();
   MX_RNG_Init();
   /* USER CODE BEGIN 2 */
 
+	
+	MB_HW_Handle_Default(&mb_hw);
+	mb_hw.uart = &huart6;
+	
+	MB_HW_Init(&mb_hw);
+	MB_HW_Receive(&mb_hw);
+	
   /* USER CODE END 2 */
 
   /* USER CODE BEGIN RTOS_MUTEX */
@@ -159,14 +159,6 @@ int main(void)
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
-
-  /* definition and creation of NetTask */
-  osThreadDef(NetTask, StartNet, osPriorityNormal, 0, 256);
-  NetTaskHandle = osThreadCreate(osThread(NetTask), NULL);
-
-  /* definition and creation of LinkTast */
-  osThreadDef(LinkTast, StartLinkTast, osPriorityNormal, 0, 512);
-  LinkTastHandle = osThreadCreate(osThread(LinkTast), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -283,37 +275,6 @@ static void MX_CRC_Init(void)
   hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_ENABLE;
   hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;
   if (HAL_CRC_Init(&hcrc) != HAL_OK)
-  {
-    _Error_Handler(__FILE__, __LINE__);
-  }
-
-}
-
-/* ETH init function */
-static void MX_ETH_Init(void)
-{
-
-   uint8_t MACAddr[6] ;
-
-  heth.Instance = ETH;
-  heth.Init.AutoNegotiation = ETH_AUTONEGOTIATION_ENABLE;
-  heth.Init.PhyAddress = LAN8742A_PHY_ADDRESS;
-  MACAddr[0] = 0x00;
-  MACAddr[1] = 0x80;
-  MACAddr[2] = 0xE1;
-  MACAddr[3] = 0x00;
-  MACAddr[4] = 0x00;
-  MACAddr[5] = 0x00;
-  heth.Init.MACAddr = &MACAddr[0];
-  heth.Init.RxMode = ETH_RXPOLLING_MODE;
-  heth.Init.ChecksumMode = ETH_CHECKSUM_BY_HARDWARE;
-  heth.Init.MediaInterface = ETH_MEDIA_INTERFACE_RMII;
-
-  /* USER CODE BEGIN MACADDRESS */
-    
-  /* USER CODE END MACADDRESS */
-
-  if (HAL_ETH_Init(&heth) != HAL_OK)
   {
     _Error_Handler(__FILE__, __LINE__);
   }
@@ -443,7 +404,6 @@ static void MX_GPIO_Init(void)
 {
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOI_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
@@ -473,42 +433,6 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END 5 */ 
-}
-
-/* USER CODE BEGIN Header_StartNet */
-/**
-* @brief Function implementing the NetTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartNet */
-void StartNet(void const * argument)
-{
-  /* USER CODE BEGIN StartNet */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartNet */
-}
-
-/* USER CODE BEGIN Header_StartLinkTast */
-/**
-* @brief Function implementing the LinkTast thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartLinkTast */
-void StartLinkTast(void const * argument)
-{
-  /* USER CODE BEGIN StartLinkTast */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartLinkTast */
 }
 
 /**

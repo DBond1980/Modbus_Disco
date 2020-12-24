@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include "FreeRTOS.h"
 #include "task.h"
+#include "cmsis_os.h"
 #include "MB.h"
 
 #define MB_HW_ADU_SIZE_MAX      257 //на один байт больше чем 256, чтобы всегда ловить пакет по тайм-ауту
@@ -25,7 +26,9 @@ typedef struct
 	uint32_t InterFrameTimeout; //тайм-аут между пакетами в битах, если InterFrameTimeout_Fix = true
 } MB_HW_HandleTypeDef;
 
+void MB_HW_Handle_Default(MB_HW_HandleTypeDef *hw);
 MB_ErrorRet MB_HW_Init(MB_HW_HandleTypeDef *hw);
+//MB_ErrorRet MB_HW_InitLight(UART_HandleTypeDef *huart);
 MB_ErrorRet MB_HW_Receive(MB_HW_HandleTypeDef *hw);
 MB_ErrorRet MB_HW_Send(MB_HW_HandleTypeDef *hw, uint8_t len);
 void MB_HW_UART_IRQHandler(UART_HandleTypeDef *huart);

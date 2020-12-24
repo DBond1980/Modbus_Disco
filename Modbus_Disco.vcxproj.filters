@@ -67,9 +67,6 @@
     <Filter Include="Header files\STM32Cube HAL\CORTEX">
       <UniqueIdentifier>{050690fe-48ce-43f7-a5cf-4aa0f2704e59}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header files\STM32Cube HAL\ETH">
-      <UniqueIdentifier>{32ce9118-185b-4fa4-9f38-0ee79d8b70a5}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Header files\STM32Cube HAL\TIM">
       <UniqueIdentifier>{932d1a28-f139-4059-a8b1-27dd3b697685}</UniqueIdentifier>
     </Filter>
@@ -123,9 +120,6 @@
     </Filter>
     <Filter Include="Source files\STM32Cube HAL\CORTEX">
       <UniqueIdentifier>{a026505b-1fa7-4f2e-b37c-4067c604dd75}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source files\STM32Cube HAL\ETH">
-      <UniqueIdentifier>{37b2489f-8128-4ec6-b120-76da289ebf95}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source files\STM32Cube HAL\TIM">
       <UniqueIdentifier>{c927ca4b-a560-42f8-8e1d-e02e76caa833}</UniqueIdentifier>
@@ -230,9 +224,6 @@
     </ClCompile>
     <ClCompile Include="Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_crc_ex.c">
       <Filter>Source files\STM32Cube HAL\CRC</Filter>
-    </ClCompile>
-    <ClCompile Include="Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_eth.c">
-      <Filter>Source files\STM32Cube HAL\ETH</Filter>
     </ClCompile>
     <ClCompile Include="Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_tim.c">
       <Filter>Source files\STM32Cube HAL\TIM</Filter>
@@ -374,9 +365,6 @@
     </ClInclude>
     <ClInclude Include="Drivers\STM32F7xx_HAL_Driver\Inc\stm32f7xx_hal_crc_ex.h">
       <Filter>Header files\STM32Cube HAL\CRC</Filter>
-    </ClInclude>
-    <ClInclude Include="Drivers\STM32F7xx_HAL_Driver\Inc\stm32f7xx_hal_eth.h">
-      <Filter>Header files\STM32Cube HAL\ETH</Filter>
     </ClInclude>
     <ClInclude Include="Drivers\STM32F7xx_HAL_Driver\Inc\stm32f7xx_hal_tim.h">
       <Filter>Header files\STM32Cube HAL\TIM</Filter>

@@ -48,7 +48,7 @@
     <AllDependencies>
       <ProjectDependency>
         <RelativePath>Modbus_Disco.gpdsc</RelativePath>
-        <Timestamp>132531248940000000</Timestamp>
+        <Timestamp>132532943619872765</Timestamp>
       </ProjectDependency>
     </AllDependencies>
     <RootDirectory>
@@ -321,17 +321,6 @@
                 </VirtualFileSnapshot>
                 <VirtualFileSnapshot>
                   <RelativePath>Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_cortex.c</RelativePath>
-                </VirtualFileSnapshot>
-              </Files>
-            </VirtualDirectorySnapshot>
-            <VirtualDirectorySnapshot>
-              <Name>ETH</Name>
-              <Files>
-                <VirtualFileSnapshot>
-                  <RelativePath>Drivers\STM32F7xx_HAL_Driver\Inc\stm32f7xx_hal_eth.h</RelativePath>
-                </VirtualFileSnapshot>
-                <VirtualFileSnapshot>
-                  <RelativePath>Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_eth.c</RelativePath>
                 </VirtualFileSnapshot>
               </Files>
             </VirtualDirectorySnapshot>
