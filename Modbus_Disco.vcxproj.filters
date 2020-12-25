@@ -405,11 +405,11 @@
     <ClCompile Include="Src\stm32f7xx_it.c">
       <Filter>Source files\STM32Cube Src</Filter>
     </ClCompile>
-    <ClCompile Include="Modbus\MB_HW.c">
-      <Filter>Source files\Modbus</Filter>
-    </ClCompile>
     <ClCompile Include="Peripherials\Timer.c">
       <Filter>Source files\Peripherials</Filter>
+    </ClCompile>
+    <ClCompile Include="Modbus\mb_rtu.c">
+      <Filter>Source files\Modbus</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -422,13 +422,13 @@
     <ClInclude Include="Inc\FreeRTOSConfig.h">
       <Filter>Header files\STM32Cube Src</Filter>
     </ClInclude>
-    <ClInclude Include="Modbus\MB_HW.h">
-      <Filter>Header files\Modbus</Filter>
-    </ClInclude>
     <ClInclude Include="Peripherials\Timer.h">
       <Filter>Header files\Peripherials</Filter>
     </ClInclude>
-    <ClInclude Include="Modbus\MB.h">
+    <ClInclude Include="Modbus\mb_rtu.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
+    <ClInclude Include="Modbus\mb.h">
       <Filter>Header files\Modbus</Filter>
     </ClInclude>
   </ItemGroup>

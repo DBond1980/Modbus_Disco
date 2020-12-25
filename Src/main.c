@@ -52,7 +52,7 @@
 #include "cmsis_os.h"
 
 /* USER CODE BEGIN Includes */
-#include "MB_HW.h"
+#include "mb_rtu.h"
 
 /* USER CODE END Includes */
 
@@ -94,7 +94,7 @@ void StartDefaultTask(void const * argument);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-MB_HW_HandleTypeDef mb_hw;
+MB_RTU_HandleTypeDef mb_hw;
 /* USER CODE END 0 */
 
 /**
@@ -135,11 +135,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
 	
-	MB_HW_Handle_Default(&mb_hw);
+	MB_RTU_Handle_Default(&mb_hw);
 	mb_hw.uart = &huart6;
 	
-	MB_HW_Init(&mb_hw);
-	MB_HW_Receive(&mb_hw);
+	MB_RTU_Init(&mb_hw);
+	mb_rtu_receive_adu(&mb_hw);
 	
   /* USER CODE END 2 */
 

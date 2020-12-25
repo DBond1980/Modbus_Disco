@@ -77,7 +77,7 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <ItemGroup>
-    <ClCompile Include="Modbus\MB_HW.c" />
+    <ClCompile Include="Modbus\mb_rtu.c" />
     <ClCompile Include="Peripherials\Timer.c" />
     <ClCompile Include="Src\freertos.c" />
     <ClCompile Include="Src\stm32f7xx_it.c" />
@@ -114,8 +114,8 @@
     <ClCompile Include="Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_dma_ex.c" />
     <ClCompile Include="Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_i2c.c" />
     <ClCompile Include="Drivers\STM32F7xx_HAL_Driver\Src\stm32f7xx_hal_i2c_ex.c" />
-    <ClInclude Include="Modbus\MB.h" />
-    <ClInclude Include="Modbus\MB_HW.h" />
+    <ClInclude Include="Modbus\mb.h" />
+    <ClInclude Include="Modbus\mb_rtu.h" />
     <ClInclude Include="Peripherials\Timer.h" />
     <None Include="stm32.props" />
     <ClCompile Include="$(BSP_ROOT)\STM32F7xxxx\StartupFiles\startup_stm32f746xx.c" />

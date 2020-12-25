@@ -19,18 +19,16 @@ typedef struct
 {
 	UART_HandleTypeDef	*uart; //Указатель на структуру UART из HAL
 	uint8_t SlaveAddress;
-	uint8_t	Buf[MB_HW_ADU_SIZE_MAX];   //Массив для хранения пакета
+	uint8_t	ADU_Buf[MB_HW_ADU_SIZE_MAX];   //Массив для хранения пакета
 	uint16_t BufLen; //Размер пакета
-	xTaskHandle Handler_Task;  //Задача, которая обрабатывает пакеты
+	int(*ReceiveEvent)(uint8_t pdu_buf, uint8_t len);    //Обработчик события приема пакета
 	bool InterFrameTimeout_Fix;//Фикстрованый тайм-аут между пакетами InterFrameTimeout
 	uint32_t InterFrameTimeout; //тайм-аут между пакетами в битах, если InterFrameTimeout_Fix = true
-} MB_HW_HandleTypeDef;
+} MB_RTU_HandleTypeDef;
 
-void MB_HW_Handle_Default(MB_HW_HandleTypeDef *hw);
-MB_ErrorRet MB_HW_Init(MB_HW_HandleTypeDef *hw);
+void MB_RTU_Handle_Default(MB_RTU_HandleTypeDef *hw);
+MB_ErrorRet MB_RTU_Init(MB_RTU_HandleTypeDef *hw);
 //MB_ErrorRet MB_HW_InitLight(UART_HandleTypeDef *huart);
-MB_ErrorRet MB_HW_Receive(MB_HW_HandleTypeDef *hw);
-MB_ErrorRet MB_HW_Send(MB_HW_HandleTypeDef *hw, uint8_t len);
-void MB_HW_UART_IRQHandler(UART_HandleTypeDef *huart);
+void MB_RTU_UART_IRQHandler(UART_HandleTypeDef *huart);
 
 #endif  /* __MB_HW_H__ */
