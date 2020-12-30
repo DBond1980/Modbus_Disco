@@ -53,6 +53,7 @@
 
 /* USER CODE BEGIN Includes */
 #include "mb_rtu.h"
+#include "mb_slave.h"
 
 /* USER CODE END Includes */
 
@@ -134,12 +135,15 @@ int main(void)
   MX_RNG_Init();
   /* USER CODE BEGIN 2 */
 
-	
-	MB_RTU_Handle_Default(&mb_hw);
-	mb_hw.uart = &huart6;
-	
-	MB_RTU_Init(&mb_hw);
-	mb_rtu_receive_adu(&mb_hw);
+  __HAL_DBGMCU_FREEZE_IWDG();
+  __HAL_DBGMCU_FREEZE_TIM1();
+
+  //MB_RTU_Handle_Default(&mb_hw);
+  //mb_hw.Instance = &huart6;
+  MB_Slave_Init(1,1, &huart6);
+
+  //MB_RTU_Init(&mb_hw);
+  //mb_rtu_receive_adu(&mb_hw);
 	
   /* USER CODE END 2 */
 
@@ -270,7 +274,7 @@ static void MX_CRC_Init(void)
   hcrc.Init.DefaultInitValueUse = DEFAULT_INIT_VALUE_DISABLE;
   hcrc.Init.GeneratingPolynomial = 32773;
   hcrc.Init.CRCLength = CRC_POLYLENGTH_16B;
-  hcrc.Init.InitValue = 0;
+  hcrc.Init.InitValue = 0xFFFF;
   hcrc.Init.InputDataInversionMode = CRC_INPUTDATA_INVERSION_BYTE;
   hcrc.Init.OutputDataInversionMode = CRC_OUTPUTDATA_INVERSION_ENABLE;
   hcrc.InputDataFormat = CRC_INPUTDATA_FORMAT_BYTES;

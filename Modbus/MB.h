@@ -12,15 +12,24 @@ typedef enum
  */
 typedef enum
 {
-	MB_OK, /*!< no error. */
-	MB_ERR_ADDRESS, /*!< illegal register address. */
-	MB_ERR_ARG, /*!< illegal argument. */
-	MB_ERR_HAL
-//	MB_EPORTERR, /*!< porting layer error. */
-//	MB_ENORES, /*!< insufficient resources. */
-//	MB_EIO, /*!< I/O error. */
-//	MB_EILLSTATE, /*!< protocol stack in illegal state. */
-//	MB_ETIMEDOUT                /*!< timeout error occurred. */
+	MB_OK,
+	MB_ERR_ADDR,
+	MB_ERR_ARG,
+	MB_ERR_HAL,
+	MB_ERR_MEM,
 } MB_ErrorRet;
+
+typedef enum
+{
+	MB_EX_NONE = 0x00,
+	MB_EX_ILLEGAL_FUNCTION = 0x01,
+	MB_EX_ILLEGAL_DATA_ADDRESS = 0x02,
+	MB_EX_ILLEGAL_DATA_VALUE = 0x03,
+	MB_EX_SLAVE_DEVICE_FAILURE = 0x04,
+	MB_EX_ACKNOWLEDGE = 0x05,
+	MB_EX_SLAVE_BUSY = 0x06,
+} MB_Exception;
+
+#define MB_PDU_FUNC_OFFSET 0
 
 #endif  /* __MB_H__ */

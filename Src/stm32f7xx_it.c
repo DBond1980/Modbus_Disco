@@ -37,7 +37,7 @@
 #include "cmsis_os.h"
 
 /* USER CODE BEGIN 0 */
-#include "MB_HW.h"
+#include "mb_rtu.h"
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/

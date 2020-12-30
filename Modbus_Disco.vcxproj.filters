@@ -411,6 +411,15 @@
     <ClCompile Include="Modbus\mb_rtu.c">
       <Filter>Source files\Modbus</Filter>
     </ClCompile>
+    <ClCompile Include="Modbus\mb_rtu_crc.c">
+      <Filter>Source files\Modbus</Filter>
+    </ClCompile>
+    <ClCompile Include="Modbus\mb_slave.c">
+      <Filter>Source files\Modbus</Filter>
+    </ClCompile>
+    <ClCompile Include="Modbus\mb_master.c">
+      <Filter>Source files\Modbus</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Inc\stm32f7xx_it.h">
@@ -429,6 +438,21 @@
       <Filter>Header files\Modbus</Filter>
     </ClInclude>
     <ClInclude Include="Modbus\mb.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
+    <ClInclude Include="Modbus\mb_port.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
+    <ClInclude Include="Modbus\mb_rtu_crc.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
+    <ClInclude Include="Modbus\mb_slave.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
+    <ClInclude Include="Modbus\mb_master.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
+    <ClInclude Include="Modbus\mb_frame.h">
       <Filter>Header files\Modbus</Filter>
     </ClInclude>
   </ItemGroup>
