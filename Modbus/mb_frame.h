@@ -35,5 +35,6 @@
 #define MB_PDU_DATA_OFFSET		1
 
 #define MB_BROADCAST_ADDRESS	0
+#define MB_FUNC_ERROR_MASK		0x80
 
 #endif /* __MBFRAME_H__ */

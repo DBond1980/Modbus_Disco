@@ -14,7 +14,7 @@ typedef struct __MB_RTU_HandleTypeDef
 	uint8_t				ADU_Buf[MB_RTU_ADU_SIZE_MAX];   //Массив для хранения пакета
 	uint16_t			BufLen; //Размер пакета
 	void				(*ReceiveEventCallback)(struct __MB_RTU_HandleTypeDef *mb_rtu,
-								uint8_t *pdu_buf, uint8_t pdu_len);     //Обработчик события приема пакета
+								 uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);     //Обработчик события приема пакета
 	MB_ErrorRet			(*SendCallback)(struct __MB_RTU_HandleTypeDef *mb_rtu, 
 								const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
 	bool				InterFrameTimeout_Fix;//Фикстрованый тайм-аут между пакетами InterFrameTimeout

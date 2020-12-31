@@ -9,9 +9,15 @@
 #include "cmsis_os.h"
 
 //Максимальное количество обслуживаемых портов (UART)
-#define MB_RTU_PORT_NUM_MAX		5
+#define MB_RTU_PORT_NUM_MAX 5
 //Аппаратный расчет контрольной суммы
-#define MB_RTU_HARDWARE_CRC		1
+#define MB_RTU_HARDWARE_CRC 1
+
+#if (MB_RTU_HARDWARE_CRC == 1)
+extern CRC_HandleTypeDef hcrc;
+#define MB_RTU_CRC_HAL_HANDLE &hcrc
+#endif
+
 
 #endif  /* __MBPORT_H__ */
 

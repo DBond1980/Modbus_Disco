@@ -86,9 +86,12 @@ static MB_ErrorRet mb_rtu_send_pdu(MB_RTU_HandleTypeDef *mb_rtu, const uint8_t *
 	//Установка адреса
 	mb_rtu->ADU_Buf[MB_ADU_ADDR_OFFSET] = broadcast ? 0 : mb_rtu->SlaveAddress;
 	adu_len++;
-	
-	//Копирование тела пакета
-	memcpy(&mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET], pdu_buf, pdu_len);
+
+	if (&mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET] != pdu_buf)
+	{
+		//Копирование тела пакета
+		memcpy(&mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET], pdu_buf, pdu_len);
+	}
 	adu_len += pdu_len;
 
 	//Расчет контрольной суммы
@@ -114,6 +117,8 @@ static void mb_rtu_receive_task(void const *arg)
 		//Блокировка задачи на очереди для ожидания поступления данных
 		if (xQueueReceive(mb_rtu_receive_queue_handle, &mb_rtu, portMAX_DELAY) != pdPASS) continue;
 
+		bool frame_ok = false;
+		
 		//Минимальный размер пакета
 		if (mb_rtu->BufLen >= MB_ADU_SIZE_MIN)
 		{
@@ -129,11 +134,15 @@ static void mb_rtu_receive_task(void const *arg)
 					{
 						//Генерация события о приеме пакета
 						mb_rtu->ReceiveEventCallback(mb_rtu, &mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET],
-								mb_rtu->BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC);
+								mb_rtu->BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC, 
+								mb_rtu->ADU_Buf[MB_ADU_ADDR_OFFSET] == MB_BROADCAST_ADDRESS);
+						
+						frame_ok = true;
 					}
 				}
 			}
 		}
+		if (!frame_ok) mb_rtu_start_receive_adu(mb_rtu);
 	}
 }
 

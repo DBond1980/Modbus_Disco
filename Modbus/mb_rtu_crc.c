@@ -69,9 +69,12 @@ uint16_t MB_RTU_CRC_Get(uint8_t * buffer, uint16_t len)
 	}
 	return (uint16_t)(crc_hi << 8 | crc_lo);
 #else
-	for (uint32_t i = 0; i < len; i++)
-		*((__IO uint8_t *)&CRC->DR) = buffer[i];	
-	return CRC->DR;
+	//	CRC->CR |= CRC_CR_RESET;
+	//	for (uint32_t i = 0; i < len; i++)
+	//		*((__IO uint8_t *)&CRC->DR) = buffer[i];
+	//	return CRC->DR;
+	return HAL_CRC_Calculate(MB_RTU_CRC_HAL_HANDLE, (uint32_t *)buffer, len);
+
 #endif
 	
 }
