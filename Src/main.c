@@ -95,7 +95,31 @@ void StartDefaultTask(void const * argument);
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
-MB_RTU_HandleTypeDef mb_hw;
+xSemaphoreHandle float_mutex;
+uint8_t testInpReg00_10[20] =
+	{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+
+uint16_t testInpReg30_40[10] =
+	{512, 2000, 3000, 4000, 5000, 6000, 7000, 256, 256, 512};
+
+float testInpReg40_50[5] =
+	{3.14f, 1.01f, 2.02f, 3.03f, 4.04f};
+
+MB_SlaveReg MB_Reg[] =
+	{
+		//		{MB_REG_HOLDING, 0, 9, testInpReg00_10, 20, NULL, NULL, MB_RF_BIG_ENDIAN},
+		//		{MB_REG_HOLDING, 30, 39, testInpReg30_40, 10, NULL, NULL, MB_RF_BIG_ENDIAN},
+		//		{MB_REG_HOLDING, 40, 49, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_BIG_ENDIAN_32},
+		//
+		{MB_REG_HOLDING, 30, 39, testInpReg30_40, 10, NULL, NULL, MB_RF_DATA},
+		{MB_REG_HOLDING, 40, 49, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_DATA},
+
+		{MB_REG_INPUT, 0, 9, testInpReg00_10, 20, NULL, NULL, MB_RF_DATA},
+		{MB_REG_INPUT, 30, 39, testInpReg30_40, 19, NULL, NULL, MB_RF_DATA},
+		{MB_REG_INPUT, 40, 49, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_DATA},
+		{MB_REG_INPUT, 0, 0, NULL, 0, NULL, NULL, MB_RF_DATA} //конец
+	};
+
 /* USER CODE END 0 */
 
 /**
@@ -140,28 +164,33 @@ int main(void)
 
   //MB_RTU_Handle_Default(&mb_hw);
   //mb_hw.Instance = &huart6;
-  MB_Slave_Init(1,1, &huart6);
-
-  //MB_RTU_Init(&mb_hw);
-  //mb_rtu_receive_adu(&mb_hw);
+  
+  float_mutex = xSemaphoreCreateMutex(); //Создание мьютекса
 	
-  /* USER CODE END 2 */
+  MB_Slave_Init_Registers(MB_Reg);
+	
+  MB_Slave_Init_RTU(1,1, &huart6);
 
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
+//MB_RTU_Init(&mb_hw);
+//mb_rtu_receive_adu(&mb_hw);
 
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
+/* USER CODE END 2 */
 
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
+/* USER CODE BEGIN RTOS_MUTEX */
+/* add mutexes, ... */
+/* USER CODE END RTOS_MUTEX */
 
-  /* Create the thread(s) */
-  /* definition and creation of defaultTask */
-  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
+/* USER CODE BEGIN RTOS_SEMAPHORES */
+/* add semaphores, ... */
+/* USER CODE END RTOS_SEMAPHORES */
+
+/* USER CODE BEGIN RTOS_TIMERS */
+/* start timers, add new ones, ... */
+/* USER CODE END RTOS_TIMERS */
+
+/* Create the thread(s) */
+/* definition and creation of defaultTask */
+osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */

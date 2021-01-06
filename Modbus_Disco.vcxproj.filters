@@ -455,5 +455,8 @@
     <ClInclude Include="Modbus\mb_frame.h">
       <Filter>Header files\Modbus</Filter>
     </ClInclude>
+    <ClInclude Include="Modbus\mb_slave_reg.h">
+      <Filter>Header files\Modbus</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

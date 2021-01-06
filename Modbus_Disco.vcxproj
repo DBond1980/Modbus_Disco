@@ -121,6 +121,7 @@
     <ClInclude Include="Modbus\mb_frame.h" />
     <ClInclude Include="Modbus\mb_master.h" />
     <ClInclude Include="Modbus\mb_port.h" />
+    <ClInclude Include="Modbus\mb_slave_reg.h" />
     <ClInclude Include="Modbus\mb_rtu.h" />
     <ClInclude Include="Modbus\mb_rtu_crc.h" />
     <ClInclude Include="Modbus\mb_slave.h" />

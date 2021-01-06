@@ -1,15 +1,18 @@
 #ifndef __MB_H__
 #define __MB_H__
 
+//typedef enum
+//{
+//	MB_REG_READ, /*!< Read register values and pass to protocol stack. */
+//	MB_REG_WRITE                /*!< Update register values. */
+//} MB_RegisterMode;
+
 typedef enum
 {
-	MB_REG_READ, /*!< Read register values and pass to protocol stack. */
-	MB_REG_WRITE                /*!< Update register values. */
-} MB_RegisterMode;
+	MB_REG_INPUT,
+	MB_REG_HOLDING,
+} MB_RegType;
 
-/*! \ingroup modbus
- * \brief Errorcodes used by all function in the protocol stack.
- */
 typedef enum
 {
 	MB_OK,
