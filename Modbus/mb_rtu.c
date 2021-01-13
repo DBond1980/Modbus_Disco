@@ -13,7 +13,7 @@ static osThreadId mb_rtu_receive_task_handle = NULL;
 static osMessageQId mb_rtu_receive_queue_handle = NULL;
 static MB_ErrorRet_t mb_rtu_start_receive_adu(MB_RTU_Handle_t *mb_rtu);
 static MB_ErrorRet_t mb_rtu_start_send_adu(MB_RTU_Handle_t *mb_rtu);
-static MB_ErrorRet_t mb_rtu_send_pdu(MB_RTU_Handle_t *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
+//static MB_ErrorRet_t MB_RTU_Send_PDU(void *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
 
 //Инициализация структуры MB_RTU_Handle_t
 void MB_RTU_Handle_Default(MB_RTU_Handle_t *mb_rtu)
@@ -23,9 +23,9 @@ void MB_RTU_Handle_Default(MB_RTU_Handle_t *mb_rtu)
 	mb_rtu->ADU_BufLen = 0;
 	mb_rtu->InterFrameTimeout_Fix = true;
 	mb_rtu->InterFrameTimeout = MB_RTU_INTER_FRAME_TIMEOUT_3_5_BYTES;
-	mb_rtu->ReceiveEventCallback = NULL;
-	mb_rtu->SendCallback = mb_rtu_send_pdu;
-	mb_rtu->Owner = NULL;
+	mb_rtu->ReceiveEvent_Callback = NULL;
+	//mb_rtu->SendCallback = MB_RTU_Send_PDU;
+	mb_rtu->Owner = NULL; //mb_rtu;
 }
 
 //Инициализация аппаратной части
@@ -74,22 +74,31 @@ MB_ErrorRet_t MB_RTU_Init(MB_RTU_Handle_t *mb_rtu)
 		
 	return MB_OK;
 }
-
-//Получить указатель на PDU пакет
-uint8_t *MB_RTU_Get_PDU(MB_RTU_Handle_t *mb_rtu)
+//void *MB_RTU_Get_Owner(void *mb_rtu)
+//{
+//	return ((MB_RTU_Handle_t *)mb_rtu)->Owner;
+//}
+//Установить адрес ведомого устройства
+void MB_RTU_Set_SlaveAddress(void *mb_rtu, uint8_t slave_address)
 {
-	return &mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET];
+	((MB_RTU_Handle_t *)mb_rtu)->SlaveAddress = slave_address;
+}
+//Получить указатель на PDU пакет
+uint8_t *MB_RTU_Get_PDU_Buf(void *mb_rtu)
+{
+	return &((MB_RTU_Handle_t *)mb_rtu)->ADU_Buf[MB_ADU_PDU_OFFSET];
 }
 //Получить размер PDU пакета
-uint8_t MB_RTU_Get_PDU_Len(MB_RTU_Handle_t *mb_rtu)
+uint8_t MB_RTU_Get_PDU_Len(void *mb_rtu)
 {
-	return mb_rtu->ADU_BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC;
+	return ((MB_RTU_Handle_t *)mb_rtu)->ADU_BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC;
 }
 
 //Передача пакета PDU
 //Преобразование PDU -> ADU
-static MB_ErrorRet_t mb_rtu_send_pdu(MB_RTU_Handle_t *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
+MB_ErrorRet_t MB_RTU_Send_PDU(void *mb_rtu_void, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
 {
+	MB_RTU_Handle_t *mb_rtu = mb_rtu_void;
 	//Проверка входных данных
 	if (pdu_len < 1 || pdu_len > 253 || mb_rtu == NULL || pdu_buf == NULL) 
 		return MB_ERR_ARG;
@@ -144,10 +153,10 @@ static void mb_rtu_receive_task(void const *arg)
 				if (MB_RTU_CRC_Get(mb_rtu->ADU_Buf, mb_rtu->ADU_BufLen) == 0)
 				{
 
-					if (mb_rtu->ReceiveEventCallback != NULL)
+					if (mb_rtu->ReceiveEvent_Callback != NULL)
 					{
 						//Генерация события о приеме пакета
-						mb_rtu->ReceiveEventCallback(mb_rtu, &mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET],
+						mb_rtu->ReceiveEvent_Callback(mb_rtu->Owner, &mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET],
 								mb_rtu->ADU_BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC, 
 								mb_rtu->ADU_Buf[MB_ADU_ADDR_OFFSET] == MB_BROADCAST_ADDRESS);
 						

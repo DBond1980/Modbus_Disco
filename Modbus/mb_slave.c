@@ -5,7 +5,20 @@
 #include "mb_slave_reg.h"
 #include <string.h>
 
-static void mb_slave_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
+typedef struct
+{
+	void			*Instance;	//Указатель на структуру RTU или в будущем TCP
+								//т.е. на структуру представляющую нижний абстрактный слой
+
+	//Callback - функции реализующие интерфейс для связи с нижним абстрактным слоем
+	MB_ErrorRet_t	(*SendPDU_Callback)(void *mb,
+							 const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);	
+	void			(*SetSlaveAddress_Callback)(void *mb, uint8_t slave_address);
+	uint32_t		DiagnosticSuccessCounter; //Диагностика - счетчик успешно принятых пакетов
+
+} mb_slave_handle_t;
+
+static void mb_slave_receive_event(void *mb_owner, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
 static MB_Exception_t mb_slave_func_read_input_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
 static MB_Exception_t mb_slave_func_read_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
 static MB_Exception_t mb_slave_func_write_holding_register(uint8_t *pdu_buf, uint8_t *pdu_len);
@@ -40,7 +53,8 @@ static const MB_Slave_FunctionHandler_t mb_slave_func_handlers[] =
 
 		{0, NULL}};
 
-//Инициализация портов (модулей MB_RTU) ведомого устройства
+//Инициализация (протокол MODBUS RTU) ведомого устройства
+//(применяется для нескольких портов)
 MB_ErrorRet_t MB_Slave_Init_RTUs(uint8_t slave_address, uint8_t num, ...)
 {	
 	va_list list;
@@ -56,12 +70,15 @@ MB_ErrorRet_t MB_Slave_Init_RTUs(uint8_t slave_address, uint8_t num, ...)
 	return MB_OK;
 }
 
-//Инициализация порта (модуль MB_RTU) ведомого устройства
+//Инициализация (протокол MODBUS RTU) ведомого устройства (один порт)
 MB_ErrorRet_t MB_Slave_Init_RTU(uint8_t slave_address, UART_HandleTypeDef *uart)
 {
-	//Под структуры MB_RTU_Handle_t выделяется память из кучи
+	//Под структуры MB_RTU_Handle_t и mb_slave_handle_t выделяется память из кучи
 	//поэтому инициализацию следует проводить один раз
 	//(или предусмотреть очистку free)
+
+	mb_slave_handle_t *mb_slave = malloc(sizeof(mb_slave_handle_t));
+	if (mb_slave == NULL) return MB_ERR_MEM;
 	
 	//Выделение памяти под порт (под структуру MB_RTU_Handle_t)
 	MB_RTU_Handle_t *mb_rtu = malloc(sizeof(MB_RTU_Handle_t));
@@ -73,18 +90,29 @@ MB_ErrorRet_t MB_Slave_Init_RTU(uint8_t slave_address, UART_HandleTypeDef *uart)
 	//Установка инициализация структуры MB_RTU_Handle_t
 	mb_rtu->Instance = uart;
 	mb_rtu->SlaveAddress = slave_address;
-	mb_rtu->ReceiveEventCallback = mb_slave_receive_event;
-
+	mb_rtu->Owner = mb_slave;
 	//Инициализация порта (модуля MB_RTU)
 	MB_ErrorRet_t ret;
 	if ((ret = MB_RTU_Init(mb_rtu)) != MB_OK)
 		return ret;
-
+	
+	//Инициализация callback - функций, которые реализуют связь с
+	//нижним абстрактным слоем
+	mb_slave->Instance = mb_rtu;
+	mb_slave->SendPDU_Callback = MB_RTU_Send_PDU;
+	mb_slave->SetSlaveAddress_Callback = MB_RTU_Set_SlaveAddress;
+	mb_rtu->ReceiveEvent_Callback = mb_slave_receive_event;
+	
 	return MB_OK;
 }
+//Инициализация порта (протокол MODBUS TCP) ведомого устройства
+//MB_ErrorRet_t MB_Slave_Init_TCP(uint8_t slave_address, /*______*/)
+//{
+//}
 
+//Инициализация регистров (регистры общие для всех ведомых устройств)
 MB_ErrorRet_t MB_Slave_Init_Registers(MB_SlaveReg_t *regs)
-{//Инициализация регистров
+{
 	//Создание мьютекса по умолчанию (чтения/записи регистров)
 	if (mb_slave_def_mutex == NULL)
 		mb_slave_def_mutex = xSemaphoreCreateMutex();
@@ -113,10 +141,11 @@ MB_ErrorRet_t MB_Slave_Init_Registers(MB_SlaveReg_t *regs)
 
 //Обработка события (callback - функция) получение пакета модулем MB_RTU
 //(для ответа используется тот же буфер pdu_buf, поэтому он должен быть не меньше 256 байт)
-static void mb_slave_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
+static void mb_slave_receive_event(void *mb_owner, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
 {
 	uint8_t i = 0;
 	MB_Exception_t ret;
+	mb_slave_handle_t *mb_slave = (mb_slave_handle_t *)mb_owner;
 
 	while (mb_slave_func_handlers[i].FunctionCode != 0)
 	{
@@ -134,7 +163,10 @@ static void mb_slave_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, ui
 		mb_slave_error_handler(pdu_buf, &pdu_len, ret);
 
 	if (!broadcast)
-		mb_rtu->SendCallback(mb_rtu, pdu_buf, pdu_len, false);
+	{
+		mb_slave->SendPDU_Callback(mb_slave->Instance, pdu_buf, pdu_len, false);
+	}
+	mb_slave->DiagnosticSuccessCounter++;
 }
 
 //Функция чтения 16-ти битных регистров Inputs

@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void mb_master_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
+static void mb_master_receive_event(void *mb_owner, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
 static MB_Exception_t mb_master_send_receive(MB_Master_Handle_t *mb_master, uint8_t *pdu_len, bool broadcast);
 
-//Инициализация ведущего устройства
+//Инициализация ведущего устройства (протокол MODBUS RTU)
 MB_ErrorRet_t MB_Master_Init_RTU(MB_Master_Handle_t *mb_master, UART_HandleTypeDef *uart, 
 								 uint16_t receive_time_out,  uint16_t repeat_number)
 {
@@ -23,7 +23,6 @@ MB_ErrorRet_t MB_Master_Init_RTU(MB_Master_Handle_t *mb_master, UART_HandleTypeD
 	//Установка инициализация структуры MB_RTU_Handle_t
 	mb_rtu->Instance = uart;
 	mb_rtu->SlaveAddress = 1;
-	mb_rtu->ReceiveEventCallback = mb_master_receive_event;
 	mb_rtu->Owner = mb_master;
 
 	//Инициализация порта (модуля MB_RTU)
@@ -32,7 +31,7 @@ MB_ErrorRet_t MB_Master_Init_RTU(MB_Master_Handle_t *mb_master, UART_HandleTypeD
 		return ret;
 
 	//Инициализация структуры MB_Master_Handle_t
-	mb_master->Instance = mb_rtu;
+	mb_master->Instance = mb_rtu;	
 	mb_master->ReceiveTimeOut = receive_time_out;
 	mb_master->RepeatNumber = repeat_number;
 	mb_master->Mutex = xSemaphoreCreateMutex(); 
@@ -40,8 +39,22 @@ MB_ErrorRet_t MB_Master_Init_RTU(MB_Master_Handle_t *mb_master, UART_HandleTypeD
 	mb_master->DiagnosticRepeatCounter = 0;
 	mb_master->DiagnosticSuccessCounter = 0;
 
+	//Инициализация callback - функций, которые реализуют связь с
+	//нижним абстрактным слоем
+	mb_master->SendPDU_Callback = MB_RTU_Send_PDU;
+	mb_master->GetPDUBuf_Callback = MB_RTU_Get_PDU_Buf;
+	mb_master->GetPDULen_Callback = MB_RTU_Get_PDU_Len;
+	mb_master->SetSlaveAddress_Callback = MB_RTU_Set_SlaveAddress;
+	mb_rtu->ReceiveEvent_Callback = mb_master_receive_event;
+
 	return MB_OK;
 }
+
+//Инициализация ведущего устройства (протокол MODBUS TCP)
+//MB_ErrorRet_t MB_Master_Init_TCP(MB_Master_Handle_t *mb_master, /*______*/,
+//								 uint16_t receive_time_out, uint16_t repeat_number)
+//{
+//}
 
 //Чтение регистров ведомого устройства
 //size_in_bytes - должен быть кратным двум (иначе последний байт не будет считываться)
@@ -50,12 +63,12 @@ MB_Exception_t MB_Master_Read_Registers(MB_Master_Handle_t *mb_master, uint8_t s
 									  void *data_buf, uint16_t size_in_bytes, MB_RegFormat_t reg_format)
 {
 	uint8_t *buf = (uint8_t *)data_buf;
-	uint8_t *pdu_buf = MB_RTU_Get_PDU(mb_master->Instance);
+	uint8_t *pdu_buf = mb_master->GetPDUBuf_Callback(mb_master->Instance);
 	
 	//Захват мьютекса
 	xSemaphoreTake(mb_master->Mutex, portMAX_DELAY);
-	
-	mb_master->Instance->SlaveAddress = slave_address;
+
+	mb_master->SetSlaveAddress_Callback(mb_master->Instance, slave_address);
 
 	pdu_buf[MB_PDU_FUNC_OFFSET] = reg_type == MB_REG_INPUT ? 
 				MB_FUNC_READ_INPUT_REGS : MB_FUNC_READ_HOLDING_REGS;
@@ -135,14 +148,14 @@ MB_Exception_t MB_Master_Write_Registers(MB_Master_Handle_t *mb_master, uint8_t 
 										 bool broadcast)
 {
 	uint8_t *buf = (uint8_t *)data_buf;
-	uint8_t *pdu_buf = MB_RTU_Get_PDU(mb_master->Instance);
+	uint8_t *pdu_buf = mb_master->GetPDUBuf_Callback(mb_master->Instance);
 
 	if (reg_type != MB_REG_HOLDING) return MB_EX_ILLEGAL_FUNCTION;
 
 	//Захват мьютекса
 	xSemaphoreTake(mb_master->Mutex, portMAX_DELAY);
 
-	mb_master->Instance->SlaveAddress = slave_address;
+	mb_master->SetSlaveAddress_Callback(mb_master->Instance, slave_address);
 
 	pdu_buf[MB_PDU_FUNC_OFFSET] = MB_FUNC_WRITE_HOLDING_REGS;
 
@@ -230,11 +243,11 @@ MB_Exception_t MB_Master_Write_Registers(MB_Master_Handle_t *mb_master, uint8_t 
 //Передача и прием посылки с повторами
 static MB_Exception_t mb_master_send_receive(MB_Master_Handle_t *mb_master, uint8_t *pdu_len, bool broadcast)
 {
-	uint8_t *pdu_buf = MB_RTU_Get_PDU(mb_master->Instance);
+	uint8_t *pdu_buf = mb_master->GetPDUBuf_Callback(mb_master->Instance);
 
 	for (int i = 0; i < mb_master->RepeatNumber; i++)
 	{
-		if (mb_master->Instance->SendCallback(mb_master->Instance,
+		if (mb_master->SendPDU_Callback(mb_master->Instance,
 				pdu_buf, *pdu_len, broadcast) != MB_OK) return MB_EX_SEND_ERROR;
 
 		if (broadcast) return MB_EX_NONE;
@@ -257,7 +270,7 @@ static MB_Exception_t mb_master_send_receive(MB_Master_Handle_t *mb_master, uint
 				continue; //Повтор посылки
 			}
 			//Расчет размера пакета PDU
-			*pdu_len = MB_RTU_Get_PDU_Len(mb_master->Instance);
+			*pdu_len = mb_master->GetPDULen_Callback(mb_master->Instance);
 			mb_master->DiagnosticSuccessCounter++; 
 			return MB_EX_NONE; //Ответ принят успешно
 		}
@@ -268,9 +281,10 @@ static MB_Exception_t mb_master_send_receive(MB_Master_Handle_t *mb_master, uint
 
 //Обработка события (callback - функция) получение пакета модулем MB_RTU
 //(для ответа используется тот же буфер pdu_buf, поэтому он должен быть не меньше 256 байт)
-static void mb_master_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
+static void mb_master_receive_event(void *mb_owner, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
 {
-	//Установка семафора для вывода задачи, которая ждет ответ (функция mb_master_send_receive),
+	//Установка семафора для вывода задачи, которая ожидает ответ (функция mb_master_send_receive),
 	//из блокированного состояния
-	xSemaphoreGive(((MB_Master_Handle_t *)mb_rtu->Owner)->Semaphore);
+
+	xSemaphoreGive(((MB_Master_Handle_t *)mb_owner)->Semaphore);
 }
