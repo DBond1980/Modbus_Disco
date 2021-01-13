@@ -3,30 +3,33 @@
 #include "limits.h"
 #include <string.h>
 
-static MB_RTU_HandleTypeDef *mb_hw_handles[MB_RTU_PORT_NUM_MAX];
+#define MB_RTU_INTER_FRAME_TIMEOUT_3_5_BYTES	35
+
+static MB_RTU_Handle_t *mb_hw_handles[MB_RTU_PORT_NUM_MAX];
 static uint8_t mb_hw_handles_num = 0;
-static MB_RTU_HandleTypeDef * mb_rtu_get_hw_from_uart(UART_HandleTypeDef *huart);
+static MB_RTU_Handle_t * mb_rtu_get_hw_from_uart(UART_HandleTypeDef *huart);
 static void mb_rtu_receive_task(void const *arg);
 static osThreadId mb_rtu_receive_task_handle = NULL;
 static osMessageQId mb_rtu_receive_queue_handle = NULL;
-static MB_ErrorRet mb_rtu_start_receive_adu(MB_RTU_HandleTypeDef *mb_rtu);
-static MB_ErrorRet mb_rtu_start_send_adu(MB_RTU_HandleTypeDef *mb_rtu);
-static MB_ErrorRet mb_rtu_send_pdu(MB_RTU_HandleTypeDef *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
+static MB_ErrorRet_t mb_rtu_start_receive_adu(MB_RTU_Handle_t *mb_rtu);
+static MB_ErrorRet_t mb_rtu_start_send_adu(MB_RTU_Handle_t *mb_rtu);
+static MB_ErrorRet_t mb_rtu_send_pdu(MB_RTU_Handle_t *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
 
-//Инициализация структуры MB_RTU_HandleTypeDef
-void MB_RTU_Handle_Default(MB_RTU_HandleTypeDef *mb_rtu)
+//Инициализация структуры MB_RTU_Handle_t
+void MB_RTU_Handle_Default(MB_RTU_Handle_t *mb_rtu)
 {
 	mb_rtu->Instance = NULL;
 	mb_rtu->SlaveAddress = 1;
-	mb_rtu->BufLen = 0;
+	mb_rtu->ADU_BufLen = 0;
 	mb_rtu->InterFrameTimeout_Fix = true;
-	mb_rtu->InterFrameTimeout = 35;
+	mb_rtu->InterFrameTimeout = MB_RTU_INTER_FRAME_TIMEOUT_3_5_BYTES;
 	mb_rtu->ReceiveEventCallback = NULL;
-	mb_rtu->SendCallback = mb_rtu_send_pdu;	
+	mb_rtu->SendCallback = mb_rtu_send_pdu;
+	mb_rtu->Owner = NULL;
 }
 
 //Инициализация аппаратной части
-MB_ErrorRet MB_RTU_Init(MB_RTU_HandleTypeDef *mb_rtu)
+MB_ErrorRet_t MB_RTU_Init(MB_RTU_Handle_t *mb_rtu)
 {
 	if (mb_rtu == NULL)
 	{
@@ -39,8 +42,8 @@ MB_ErrorRet MB_RTU_Init(MB_RTU_HandleTypeDef *mb_rtu)
 	if (mb_rtu_receive_queue_handle == NULL)
 	{
 		//Создание очереди для приема пакетов	
-		//mb_rtu_receive_queue_handle = xQueueCreate(MB_HW_PORT_NUM_MAX, sizeof(MB_RTU_HandleTypeDef *));
-		osMessageQDef(mb_rtu_receive_queue, MB_RTU_PORT_NUM_MAX, sizeof(MB_RTU_HandleTypeDef *));
+		//mb_rtu_receive_queue_handle = xQueueCreate(MB_HW_PORT_NUM_MAX, sizeof(MB_RTU_Handle_t *));
+		osMessageQDef(mb_rtu_receive_queue, MB_RTU_PORT_NUM_MAX, sizeof(MB_RTU_Handle_t *));
 		mb_rtu_receive_queue_handle = osMessageCreate(osMessageQ(mb_rtu_receive_queue), NULL);	
 	}
 	
@@ -60,7 +63,7 @@ MB_ErrorRet MB_RTU_Init(MB_RTU_HandleTypeDef *mb_rtu)
 		if (mb_rtu->Instance->Init.BaudRate >= 19200)
 			mb_rtu->InterFrameTimeout = mb_rtu->Instance->Instance->RTOR = 0.00175f * mb_rtu->Instance->Init.BaudRate + 1;
 		else
-			mb_rtu->InterFrameTimeout = mb_rtu->Instance->Instance->RTOR = 35;
+			mb_rtu->InterFrameTimeout = mb_rtu->Instance->Instance->RTOR = MB_RTU_INTER_FRAME_TIMEOUT_3_5_BYTES;
 		
 	}	
 	//Включение прерывания по тайм-ауту между пакетами (HAL не поддерживает)
@@ -72,9 +75,20 @@ MB_ErrorRet MB_RTU_Init(MB_RTU_HandleTypeDef *mb_rtu)
 	return MB_OK;
 }
 
+//Получить указатель на PDU пакет
+uint8_t *MB_RTU_Get_PDU(MB_RTU_Handle_t *mb_rtu)
+{
+	return &mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET];
+}
+//Получить размер PDU пакета
+uint8_t MB_RTU_Get_PDU_Len(MB_RTU_Handle_t *mb_rtu)
+{
+	return mb_rtu->ADU_BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC;
+}
+
 //Передача пакета PDU
 //Преобразование PDU -> ADU
-static MB_ErrorRet mb_rtu_send_pdu(MB_RTU_HandleTypeDef *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
+static MB_ErrorRet_t mb_rtu_send_pdu(MB_RTU_Handle_t *mb_rtu, const uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
 {
 	//Проверка входных данных
 	if (pdu_len < 1 || pdu_len > 253 || mb_rtu == NULL || pdu_buf == NULL) 
@@ -100,7 +114,7 @@ static MB_ErrorRet mb_rtu_send_pdu(MB_RTU_HandleTypeDef *mb_rtu, const uint8_t *
 	mb_rtu->ADU_Buf[adu_len++] = (uint8_t)(crc >> 8);
 
 	//Установка размера пакета
-	mb_rtu->BufLen = adu_len;
+	mb_rtu->ADU_BufLen = adu_len;
 	
 	return mb_rtu_start_send_adu(mb_rtu);
 }
@@ -110,7 +124,7 @@ static MB_ErrorRet mb_rtu_send_pdu(MB_RTU_HandleTypeDef *mb_rtu, const uint8_t *
 //Генерация события о приеме пакета
 static void mb_rtu_receive_task(void const *arg)
 {
-	MB_RTU_HandleTypeDef *mb_rtu;
+	MB_RTU_Handle_t *mb_rtu;
 
 	while (true)
 	{
@@ -120,21 +134,21 @@ static void mb_rtu_receive_task(void const *arg)
 		bool frame_ok = false;
 		
 		//Минимальный размер пакета
-		if (mb_rtu->BufLen >= MB_ADU_SIZE_MIN)
+		if (mb_rtu->ADU_BufLen >= MB_ADU_SIZE_MIN)
 		{
 			//Проверка адреса
 			if (mb_rtu->ADU_Buf[MB_ADU_ADDR_OFFSET] == mb_rtu->SlaveAddress ||
 				mb_rtu->ADU_Buf[MB_ADU_ADDR_OFFSET] == MB_BROADCAST_ADDRESS)
 			{
 				//Проверка CRC
-				if (MB_RTU_CRC_Get(mb_rtu->ADU_Buf, mb_rtu->BufLen) == 0)
+				if (MB_RTU_CRC_Get(mb_rtu->ADU_Buf, mb_rtu->ADU_BufLen) == 0)
 				{
 
 					if (mb_rtu->ReceiveEventCallback != NULL)
 					{
 						//Генерация события о приеме пакета
 						mb_rtu->ReceiveEventCallback(mb_rtu, &mb_rtu->ADU_Buf[MB_ADU_PDU_OFFSET],
-								mb_rtu->BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC, 
+								mb_rtu->ADU_BufLen - MB_ADU_PDU_OFFSET - MB_ADU_SIZE_CRC, 
 								mb_rtu->ADU_Buf[MB_ADU_ADDR_OFFSET] == MB_BROADCAST_ADDRESS);
 						
 						frame_ok = true;
@@ -147,11 +161,11 @@ static void mb_rtu_receive_task(void const *arg)
 }
 
 //Прием пакета при помощи DMA
-static MB_ErrorRet mb_rtu_start_receive_adu(MB_RTU_HandleTypeDef *mb_rtu)
+static MB_ErrorRet_t mb_rtu_start_receive_adu(MB_RTU_Handle_t *mb_rtu)
 {
 	if (mb_rtu == NULL) return MB_ERR_ARG;
 
-	mb_rtu->BufLen = 0;
+	mb_rtu->ADU_BufLen = 0;
 	SET_BIT(mb_rtu->Instance->Instance->CR2, USART_CR2_RTOEN);
 	if (HAL_UART_Receive_DMA(mb_rtu->Instance, mb_rtu->ADU_Buf, MB_RTU_ADU_SIZE_MAX) != HAL_OK)
 	{
@@ -161,11 +175,11 @@ static MB_ErrorRet mb_rtu_start_receive_adu(MB_RTU_HandleTypeDef *mb_rtu)
 }
 
 //Передача пакетов при помощи DMA
-static MB_ErrorRet mb_rtu_start_send_adu(MB_RTU_HandleTypeDef *mb_rtu)
+static MB_ErrorRet_t mb_rtu_start_send_adu(MB_RTU_Handle_t *mb_rtu)
 {
 	if (mb_rtu == NULL) return MB_ERR_ARG;
 
-	if (HAL_UART_Transmit_DMA(mb_rtu->Instance, mb_rtu->ADU_Buf, mb_rtu->BufLen) != HAL_OK)
+	if (HAL_UART_Transmit_DMA(mb_rtu->Instance, mb_rtu->ADU_Buf, mb_rtu->ADU_BufLen) != HAL_OK)
 	{
 		return MB_ERR_HAL;
 	}
@@ -173,7 +187,7 @@ static MB_ErrorRet mb_rtu_start_send_adu(MB_RTU_HandleTypeDef *mb_rtu)
 }
 
 //Вернуть указатель на основную структуру по указателю на порт
-static MB_RTU_HandleTypeDef * mb_rtu_get_hw_from_uart(UART_HandleTypeDef *huart)
+static MB_RTU_Handle_t * mb_rtu_get_hw_from_uart(UART_HandleTypeDef *huart)
 {
 	for (int i = 0; i < mb_hw_handles_num; i++)
 	{
@@ -224,10 +238,10 @@ void MB_RTU_UART_IRQHandler(UART_HandleTypeDef *huart)
 		
 		HAL_UART_DMAStop(huart);
 		
-		MB_RTU_HandleTypeDef *mb_rtu = mb_rtu_get_hw_from_uart(huart);
+		MB_RTU_Handle_t *mb_rtu = mb_rtu_get_hw_from_uart(huart);
 		if (mb_rtu == NULL) return;
 
-		mb_rtu->BufLen = MB_RTU_ADU_SIZE_MAX - huart->hdmarx->Instance->NDTR;
+		mb_rtu->ADU_BufLen = MB_RTU_ADU_SIZE_MAX - huart->hdmarx->Instance->NDTR;
 		
 		if (mb_rtu_receive_task_handle == NULL || mb_rtu_receive_queue_handle == NULL)
 		{

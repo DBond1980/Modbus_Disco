@@ -5,52 +5,31 @@
 #include "mb_slave_reg.h"
 #include <string.h>
 
-#define MB_PDU_READ_ADDR_OFFSET			(MB_PDU_DATA_OFFSET)
-#define MB_PDU_READ_REGCNT_OFFSET		(MB_PDU_DATA_OFFSET + 2)
-#define MB_PDU_READ_REGCNT_MAX			(0x007D)
-#define MB_PDU_READ_SIZE				(4)
-#define MB_PDU_READ_OUT_BYTECNT_OFFSET  (MB_PDU_DATA_OFFSET)
-#define MB_PDU_READ_OUT_DATA_OFFSET		(MB_PDU_DATA_OFFSET + 1)
+static void mb_slave_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
+static MB_Exception_t mb_slave_func_read_input_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
+static MB_Exception_t mb_slave_func_read_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
+static MB_Exception_t mb_slave_func_write_holding_register(uint8_t *pdu_buf, uint8_t *pdu_len);
+static MB_Exception_t mb_slave_func_write_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
+static void mb_slave_error_handler(uint8_t *pdu_buf, uint8_t *pdu_len, MB_Exception_t exception);
 
-#define MB_PDU_WRITE_MUL_ADDR_OFFSET	(MB_PDU_DATA_OFFSET)
-#define MB_PDU_WRITE_MUL_REGCNT_OFFSET	(MB_PDU_DATA_OFFSET + 2)
-#define MB_PDU_WRITE_MUL_BYTECNT_OFFSET (MB_PDU_DATA_OFFSET + 4)
-#define MB_PDU_WRITE_MUL_VALUES_OFFSET	(MB_PDU_DATA_OFFSET + 5)
-#define MB_PDU_WRITE_MUL_SIZE_MIN		(5)
-#define MB_PDU_WRITE_MUL_REGCNT_MAX		(0x0078)
+static MB_Exception_t mb_slave_read_registers(MB_RegType_t reg_type, uint8_t *data_buf, uint16_t reg_address, int16_t reg_count);
+static MB_Exception_t mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t reg_address, uint16_t reg_count);
 
-#define MB_PDU_WRITE_ADDR_OFFSET		(MB_PDU_DATA_OFFSET)
-#define MB_PDU_WRITE_VALUE_OFFSET		(MB_PDU_DATA_OFFSET + 2)
-#define MB_PDU_WRITE_SIZE				(4)
-
-#define MB_PDU_ERROR_EXCEPTION			(MB_PDU_DATA_OFFSET)
-#define MB_PDU_ERROR_SIZE				(2)
-
-static void mb_slave_receive_event(MB_RTU_HandleTypeDef *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast);
-static MB_Exception mb_slave_func_read_input_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
-static MB_Exception mb_slave_func_read_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
-static MB_Exception mb_slave_func_write_holding_register(uint8_t *pdu_buf, uint8_t *pdu_len);
-static MB_Exception mb_slave_func_write_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len);
-static void mb_slave_error_handler(uint8_t *pdu_buf, uint8_t *pdu_len, MB_Exception exception);
-
-static MB_Exception mb_slave_read_registers(MB_RegType reg_type, uint8_t *data_buf, uint16_t reg_address, int16_t reg_count);
-static MB_Exception mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t reg_address, uint16_t reg_count);
-
-static MB_SlaveReg *mb_slave_regs = NULL; //Указатель на список регистров
+static MB_SlaveReg_t *mb_slave_regs = NULL; //Указатель на список регистров
 static xSemaphoreHandle mb_slave_def_mutex = NULL; //Мьютекс по умолчанию (чтения/записи регистров)
 
 typedef struct
 {
 	uint8_t FunctionCode;
-	MB_Exception (*Handler)(uint8_t *pdu_buf, uint8_t *pdu_len);
-} MB_Slave_FunctionHandler;
+	MB_Exception_t (*Handler)(uint8_t *pdu_buf, uint8_t *pdu_len);
+} MB_Slave_FunctionHandler_t;
 
-static const MB_Slave_FunctionHandler mb_slave_func_handlers[] =
+static const MB_Slave_FunctionHandler_t mb_slave_func_handlers[] =
 	{
-		{0x04, mb_slave_func_read_input_registers},
-		{0x03, mb_slave_func_read_holding_registers},
-		{0x06, mb_slave_func_write_holding_register},
-		{0x10, mb_slave_func_write_holding_registers},
+		{MB_FUNC_READ_INPUT_REGS,		mb_slave_func_read_input_registers},
+		{MB_FUNC_READ_HOLDING_REGS,		mb_slave_func_read_holding_registers},
+		{MB_FUNC_WRITE_HOLDING_REG,		mb_slave_func_write_holding_register},
+		{MB_FUNC_WRITE_HOLDING_REGS,	mb_slave_func_write_holding_registers},
 		
 		//{0x02, FuncReadDiscreteInputs},
 		//{0x01, FuncReadCoils},
@@ -62,33 +41,14 @@ static const MB_Slave_FunctionHandler mb_slave_func_handlers[] =
 		{0, NULL}};
 
 //Инициализация портов (модулей MB_RTU) ведомого устройства
-MB_ErrorRet MB_Slave_Init_RTU(uint8_t slave_address, uint8_t num, ...)
+MB_ErrorRet_t MB_Slave_Init_RTUs(uint8_t slave_address, uint8_t num, ...)
 {	
-	//Под структуры MB_RTU_HandleTypeDef выделяется память из кучи
-	//поэтому инициализацию следует проводить один раз
-	//(или предусмотреть очистку free)
-	
 	va_list list;
 	va_start(list, num);
 
 	for (uint8_t i = 0; i < num; i++)
 	{
-		//Выделение памяти под порт (под структуру MB_RTU_HandleTypeDef)
-		MB_RTU_HandleTypeDef *mb_rtu = malloc(sizeof(MB_RTU_HandleTypeDef));
-		if (mb_rtu == NULL)	return MB_ERR_MEM;
-
-		//Инициализация структуры MB_RTU_HandleTypeDef начальным состоянием
-		MB_RTU_Handle_Default(mb_rtu);
-
-		//Установка инициализация структуры MB_RTU_HandleTypeDef
-		mb_rtu->Instance = va_arg(list, UART_HandleTypeDef *);
-		mb_rtu->SlaveAddress = slave_address;
-		mb_rtu->ReceiveEventCallback = mb_slave_receive_event;
-
-		//Инициализация порта (модуля MB_RTU)
-		MB_ErrorRet ret;
-		if ((ret = MB_RTU_Init(mb_rtu)) != MB_OK)
-			return ret;
+		MB_Slave_Init_RTU(slave_address, va_arg(list, UART_HandleTypeDef *));
 	}
 	
 	va_end(list);
@@ -96,7 +56,34 @@ MB_ErrorRet MB_Slave_Init_RTU(uint8_t slave_address, uint8_t num, ...)
 	return MB_OK;
 }
 
-MB_ErrorRet MB_Slave_Init_Registers(MB_SlaveReg *regs)
+//Инициализация порта (модуль MB_RTU) ведомого устройства
+MB_ErrorRet_t MB_Slave_Init_RTU(uint8_t slave_address, UART_HandleTypeDef *uart)
+{
+	//Под структуры MB_RTU_Handle_t выделяется память из кучи
+	//поэтому инициализацию следует проводить один раз
+	//(или предусмотреть очистку free)
+	
+	//Выделение памяти под порт (под структуру MB_RTU_Handle_t)
+	MB_RTU_Handle_t *mb_rtu = malloc(sizeof(MB_RTU_Handle_t));
+	if (mb_rtu == NULL)	return MB_ERR_MEM;
+
+	//Инициализация структуры MB_RTU_Handle_t начальным состоянием
+	MB_RTU_Handle_Default(mb_rtu);
+
+	//Установка инициализация структуры MB_RTU_Handle_t
+	mb_rtu->Instance = uart;
+	mb_rtu->SlaveAddress = slave_address;
+	mb_rtu->ReceiveEventCallback = mb_slave_receive_event;
+
+	//Инициализация порта (модуля MB_RTU)
+	MB_ErrorRet_t ret;
+	if ((ret = MB_RTU_Init(mb_rtu)) != MB_OK)
+		return ret;
+
+	return MB_OK;
+}
+
+MB_ErrorRet_t MB_Slave_Init_Registers(MB_SlaveReg_t *regs)
 {//Инициализация регистров
 	//Создание мьютекса по умолчанию (чтения/записи регистров)
 	if (mb_slave_def_mutex == NULL)
@@ -112,8 +99,8 @@ MB_ErrorRet MB_Slave_Init_Registers(MB_SlaveReg *regs)
 			return MB_ERR_ARG;
 
 		//Установка мьютекса по умолчанию если он не задан
-		if (regs[i].Mutex == NULL)
-			regs[i].Mutex = mb_slave_def_mutex;
+		if (regs[i].MutexPtr == NULL)
+			regs[i].MutexPtr = &mb_slave_def_mutex;
 		
 		i++;
 	}
@@ -126,10 +113,10 @@ MB_ErrorRet MB_Slave_Init_Registers(MB_SlaveReg *regs)
 
 //Обработка события (callback - функция) получение пакета модулем MB_RTU
 //(для ответа используется тот же буфер pdu_buf, поэтому он должен быть не меньше 256 байт)
-static void mb_slave_receive_event(MB_RTU_HandleTypeDef *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
+static void mb_slave_receive_event(MB_RTU_Handle_t *mb_rtu, uint8_t *pdu_buf, uint8_t pdu_len, bool broadcast)
 {
 	uint8_t i = 0;
-	MB_Exception ret;
+	MB_Exception_t ret;
 
 	while (mb_slave_func_handlers[i].FunctionCode != 0)
 	{
@@ -151,10 +138,10 @@ static void mb_slave_receive_event(MB_RTU_HandleTypeDef *mb_rtu, uint8_t *pdu_bu
 }
 
 //Функция чтения 16-ти битных регистров Inputs
-static MB_Exception mb_slave_func_read_input_registers(uint8_t *pdu_buf, uint8_t *pdu_len)
+static MB_Exception_t mb_slave_func_read_input_registers(uint8_t *pdu_buf, uint8_t *pdu_len)
 {
 	//Проверка размера входного пакета
-	if (*pdu_len != MB_PDU_READ_SIZE + MB_PDU_SIZE_MIN)
+	if (*pdu_len != MB_PDU_READ_DATA_SIZE_MIN + MB_PDU_SIZE_MIN)
 		return MB_EX_ILLEGAL_DATA_VALUE;
 
 	//Определение адресса регистров и их количество
@@ -176,10 +163,10 @@ static MB_Exception mb_slave_func_read_input_registers(uint8_t *pdu_buf, uint8_t
 }
 
 //Функция чтения 16-ти битных регистров Holding
-static MB_Exception mb_slave_func_read_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len)
+static MB_Exception_t mb_slave_func_read_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len)
 {
 	//Проверка размера входного пакета
-	if (*pdu_len != MB_PDU_READ_SIZE + MB_PDU_SIZE_MIN)
+	if (*pdu_len != MB_PDU_READ_DATA_SIZE_MIN + MB_PDU_SIZE_MIN)
 		return MB_EX_ILLEGAL_DATA_VALUE;
 
 	//Определение адресса регистров и их количество
@@ -201,7 +188,7 @@ static MB_Exception mb_slave_func_read_holding_registers(uint8_t *pdu_buf, uint8
 }
 
 //Функция записи одного 16-ти битного регистра Holding
-static MB_Exception mb_slave_func_write_holding_register(uint8_t *pdu_buf, uint8_t *pdu_len)
+static MB_Exception_t mb_slave_func_write_holding_register(uint8_t *pdu_buf, uint8_t *pdu_len)
 {
 	//Проверка размера входного пакета
 	if (*pdu_len != MB_PDU_WRITE_SIZE + MB_PDU_SIZE_MIN)
@@ -211,11 +198,11 @@ static MB_Exception mb_slave_func_write_holding_register(uint8_t *pdu_buf, uint8
 	const uint16_t reg_addr = pdu_buf[MB_PDU_READ_ADDR_OFFSET] << 8 | pdu_buf[MB_PDU_READ_ADDR_OFFSET + 1];
 	
 	//Запись регистра
-	return mb_slave_write_holding_registers(&pdu_buf[MB_PDU_WRITE_MUL_VALUES_OFFSET], reg_addr, 1);
+	return mb_slave_write_holding_registers(&pdu_buf[MB_PDU_WRITE_MUL_DATA_OFFSET], reg_addr, 1);
 }
 
 //Функция записи 16-ти битных регистров Holding
-static MB_Exception mb_slave_func_write_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len)
+static MB_Exception_t mb_slave_func_write_holding_registers(uint8_t *pdu_buf, uint8_t *pdu_len)
 {
 	//Проверка минимального размера входного пакета
 	if (*pdu_len < MB_PDU_WRITE_MUL_SIZE_MIN + MB_PDU_SIZE_MIN)
@@ -235,11 +222,11 @@ static MB_Exception mb_slave_func_write_holding_registers(uint8_t *pdu_buf, uint
 	*pdu_len = MB_PDU_WRITE_MUL_BYTECNT_OFFSET;
 
 	//Запись регистров
-	return mb_slave_write_holding_registers(&pdu_buf[MB_PDU_WRITE_MUL_VALUES_OFFSET], start_reg_addr, reg_count);
+	return mb_slave_write_holding_registers(&pdu_buf[MB_PDU_WRITE_MUL_DATA_OFFSET], start_reg_addr, reg_count);
 }
 
 //Обработчик ошибки (исключения)
-static void mb_slave_error_handler(uint8_t *pdu_buf, uint8_t *pdu_len, MB_Exception exception)
+static void mb_slave_error_handler(uint8_t *pdu_buf, uint8_t *pdu_len, MB_Exception_t exception)
 {
 	pdu_buf[MB_PDU_FUNC_OFFSET] |= MB_FUNC_ERROR_MASK;
 	pdu_buf[MB_PDU_ERROR_EXCEPTION] = exception;
@@ -247,7 +234,7 @@ static void mb_slave_error_handler(uint8_t *pdu_buf, uint8_t *pdu_len, MB_Except
 }
 
 //Чтение регистров
-static MB_Exception mb_slave_read_registers(MB_RegType reg_type, uint8_t *data_buf, uint16_t reg_address, int16_t reg_count)
+static MB_Exception_t mb_slave_read_registers(MB_RegType_t reg_type, uint8_t *data_buf, uint16_t reg_address, int16_t reg_count)
 {
 	if (mb_slave_regs == NULL)
 		return MB_EX_ILLEGAL_DATA_ADDRESS;
@@ -268,9 +255,14 @@ static MB_Exception mb_slave_read_registers(MB_RegType reg_type, uint8_t *data_b
 		if (reg_address >= mb_slave_regs[reg_block].FirstAddr && reg_address <= mb_slave_regs[reg_block].LastAddr)
 		{
 			//Соответствующий блок регистров найден
-			
+
+			//Захват мьютекса, который соответствует найденному блоку регистров
+			if (mb_slave_regs[reg_block].MutexPtr != NULL)
+				xSemaphoreTake(*mb_slave_regs[reg_block].MutexPtr, portMAX_DELAY);
+
 			//Расчет начального адреса для чтения данных из регистров
-			uint8_t *reg_buf = ((uint8_t *)mb_slave_regs[reg_block].Data) + (reg_address - mb_slave_regs[reg_block].FirstAddr) * 2;
+			uint8_t *reg_buf = ((uint8_t *)mb_slave_regs[reg_block].Data) + 
+							   (reg_address - mb_slave_regs[reg_block].FirstAddr) * 2;
 
 			while (true)
 			{
@@ -279,7 +271,8 @@ static MB_Exception mb_slave_read_registers(MB_RegType reg_type, uint8_t *data_b
 					//Блок данных
 
 					//Расчет количества байт данных для копирования
-					int32_t len = mb_slave_regs[reg_block].DataLen - (reg_buf - (uint8_t *)mb_slave_regs[reg_block].Data);
+					int32_t len = mb_slave_regs[reg_block].DataLen - 
+								  (reg_buf - (uint8_t *)mb_slave_regs[reg_block].Data);
 
 					if (len == 0)
 					{//Количество регистров больше чем массив с данными
@@ -359,19 +352,32 @@ static MB_Exception mb_slave_read_registers(MB_RegType reg_type, uint8_t *data_b
 					reg_address++;
 				}
 
-				if (reg_count <= 0)
+				if (reg_count <= 0 || reg_address > mb_slave_regs[reg_block].LastAddr)
 				{
-					//Конец. Все регистры считанны
-					return MB_EX_NONE;
-				}
+					//Конец
 
-				if (reg_address > mb_slave_regs[reg_block].LastAddr)
-				{
-					//Конец блока регистров.
-					//Поиск нового блока регистров начинаем сначала
-					//т.к. блоки могут могут иметь произвольную последовательность
-					reg_block = -1;
-					break;
+					//Освобождение мьютекса
+					if (mb_slave_regs[reg_block].MutexPtr != NULL)
+						xSemaphoreGive(*mb_slave_regs[reg_block].MutexPtr);
+
+					//Отдать семафор
+					if (mb_slave_regs[reg_block].SemaphorePtr != NULL)
+						xSemaphoreGive(*mb_slave_regs[reg_block].SemaphorePtr);
+
+					if (reg_count <= 0)
+					{
+						//Конец. Все регистры считанны
+						return MB_EX_NONE;
+					}
+
+					if (reg_address > mb_slave_regs[reg_block].LastAddr)
+					{
+						//Конец блока регистров.
+						//Поиск нового блока регистров начинаем сначала
+						//т.к. блоки могут могут иметь произвольную последовательность
+						reg_block = -1;
+						break;
+					}
 				}
 			}
 		}
@@ -385,7 +391,7 @@ static MB_Exception mb_slave_read_registers(MB_RegType reg_type, uint8_t *data_b
 }
 
 //Запись регистров holding
-static MB_Exception mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t reg_address, uint16_t reg_count)
+static MB_Exception_t mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t reg_address, uint16_t reg_count)
 {
 	if (mb_slave_regs == NULL)
 		return MB_EX_ILLEGAL_DATA_ADDRESS;
@@ -407,8 +413,13 @@ static MB_Exception mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t
 		{
 			//Соответствующий блок регистров найден
 
+			//Захват мьютекса, который соответствует найденному блоку регистров
+			if (mb_slave_regs[reg_block].MutexPtr != NULL)
+				xSemaphoreTake(*mb_slave_regs[reg_block].MutexPtr, portMAX_DELAY); 
+
 			//Расчет начального адреса для записи данных из регистров
-			uint8_t *reg_buf = ((uint8_t *)mb_slave_regs[reg_block].Data) + (reg_address - mb_slave_regs[reg_block].FirstAddr) * 2;
+			uint8_t *reg_buf = ((uint8_t *)mb_slave_regs[reg_block].Data) + 
+							   (reg_address - mb_slave_regs[reg_block].FirstAddr) * 2;
 
 			while (true)
 			{
@@ -417,12 +428,14 @@ static MB_Exception mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t
 					//Блок данных
 
 					//Расчет количества байт данных для копирования
-					int32_t len = mb_slave_regs[reg_block].DataLen - (reg_buf - (uint8_t *)mb_slave_regs[reg_block].Data);
+					int32_t len = mb_slave_regs[reg_block].DataLen - 
+								  (reg_buf - (uint8_t *)mb_slave_regs[reg_block].Data);
 
 					if (len == 0)
 					{ //Количество регистров больше чем массив с данными
 						//Расчет количества оставшихся пустых данных в блоке
-						len = (mb_slave_regs[reg_block].LastAddr - mb_slave_regs[reg_block].FirstAddr + 1) * 2 - (reg_buf - (uint8_t *)mb_slave_regs[reg_block].Data);
+						len = (mb_slave_regs[reg_block].LastAddr - mb_slave_regs[reg_block].FirstAddr + 1) * 2 -
+							  (reg_buf - (uint8_t *)mb_slave_regs[reg_block].Data);
 						if (len > reg_count * 2) len = reg_count * 2;
 					}
 					else
@@ -460,7 +473,7 @@ static MB_Exception mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t
 				{
 					//16-ти битные данные в формате big-endian или little-endian, или
 					//32-x битные данные в формате little-endian
-					//
+					
 					if (reg_buf + 2 - (uint8_t *)mb_slave_regs[reg_block].Data <= mb_slave_regs[reg_block].DataLen)
 					{
 						if (mb_slave_regs[reg_block].Endian == MB_RF_LITTLE_ENDIAN)
@@ -480,19 +493,32 @@ static MB_Exception mb_slave_write_holding_registers(uint8_t *data_buf, uint16_t
 					reg_address++;
 				}
 
-				if (reg_count <= 0)
+				if (reg_count <= 0 || reg_address > mb_slave_regs[reg_block].LastAddr)
 				{
-					//Конец. Все регистры записаны
-					return MB_EX_NONE;
-				}
+					//Конец
+					
+					//Освобождение мьютекса
+					if (mb_slave_regs[reg_block].MutexPtr != NULL)
+						xSemaphoreGive(*mb_slave_regs[reg_block].MutexPtr);
 
-				if (reg_address > mb_slave_regs[reg_block].LastAddr)
-				{
-					//Конец блока регистров.
-					//Поиск нового блока регистров начинаем сначала
-					//т.к. блоки могут могут иметь произвольную последовательность
-					reg_block = -1;
-					break;
+					//Отдать семафор
+					if (mb_slave_regs[reg_block].SemaphorePtr != NULL)
+						xSemaphoreGive(*mb_slave_regs[reg_block].SemaphorePtr);
+
+					if (reg_count <= 0)
+					{
+						//Конец. Все регистры записаны
+						return MB_EX_NONE;
+					}
+
+					if (reg_address > mb_slave_regs[reg_block].LastAddr)
+					{
+						//Конец блока регистров.
+						//Поиск нового блока регистров начинаем сначала
+						//т.к. блоки могут могут иметь произвольную последовательность
+						reg_block = -1;
+						break;
+					}
 				}
 			}
 		}

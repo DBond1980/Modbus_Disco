@@ -459,4 +459,7 @@
       <Filter>Header files\Modbus</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="Tasks.txt" />
+  </ItemGroup>
 </Project>
