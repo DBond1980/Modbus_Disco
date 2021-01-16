@@ -54,6 +54,7 @@
 /* USER CODE BEGIN Includes */
 #include "mb_master.h"
 #include "mb_slave.h"
+#include "data_structs.h"
 
 /* USER CODE END Includes */
 
@@ -105,18 +106,30 @@ uint16_t testInpReg30_40[10] =
 float testInpReg40_50[5] =
 	{3.14f, 1.01f, 2.02f, 3.03f, 4.04f};
 
+DS_Device_Info_16 Device_Info_16 =
+	{0x5264, 1, 0, 0, 0, 1, 2, 0};
+DS_Device_Info_Str Device_Info_Str =
+	{"R100.1", "1.00", "15.01.2021", "No note"};
+
+xSemaphoreHandle Device_Info_Mutex = NULL;
+
 MB_SlaveReg_t MB_Reg[] =
 	{
-		//		{MB_REG_HOLDING, 0, 9, testInpReg00_10, 20, NULL, NULL, MB_RF_BIG_ENDIAN},
-		//		{MB_REG_HOLDING, 30, 39, testInpReg30_40, 10, NULL, NULL, MB_RF_BIG_ENDIAN},
-		//		{MB_REG_HOLDING, 40, 49, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_BIG_ENDIAN_32},
-		//
+		//Регистры в которых содержится информация о приборе
+		{MB_REG_INPUT, 0, 7, &Device_Info_16, sizeof(Device_Info_16), &Device_Info_Mutex, NULL, MB_RF_BIG_ENDIAN},
+		{MB_REG_INPUT, 8, 95, &Device_Info_Str, sizeof(Device_Info_Str), &Device_Info_Mutex, NULL, MB_RF_DATA},
+
+		//Настройки c 5000
+		//Настройка Slave ID
+		//{MB_REG_HOLDING, 5000, 5000, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_BIG_ENDIAN},
+		
+
 		{MB_REG_HOLDING, 30, 39, testInpReg30_40, 10, NULL, NULL, MB_RF_DATA},
 		{MB_REG_HOLDING, 40, 49, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_BIG_ENDIAN},
 
-		{MB_REG_INPUT, 0, 9, testInpReg00_10, 20, NULL, NULL, MB_RF_DATA},
-		{MB_REG_INPUT, 30, 39, testInpReg30_40, 19, NULL, NULL, MB_RF_DATA},
-		{MB_REG_INPUT, 40, 49, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_DATA},
+		{MB_REG_INPUT, 1000, 1009, testInpReg00_10, 20, NULL, NULL, MB_RF_DATA},
+		{MB_REG_INPUT, 1030, 1039, testInpReg30_40, 19, NULL, NULL, MB_RF_DATA},
+		{MB_REG_INPUT, 1040, 1049, testInpReg40_50, 20, &float_mutex, NULL, MB_RF_DATA},
 		{MB_REG_INPUT, 0, 0, NULL, 0, NULL, NULL, MB_RF_DATA} //конец
 	};
 
@@ -162,9 +175,10 @@ int main(void)
   __HAL_DBGMCU_FREEZE_IWDG();
   __HAL_DBGMCU_FREEZE_TIM1();
 
-  //float_mutex = xSemaphoreCreateMutex(); //Создание мьютекса
-  //MB_Slave_Init_Registers(MB_Reg);
-  //MB_Slave_Init_RTU(1, &huart6);
+  float_mutex = xSemaphoreCreateMutex(); 
+  Device_Info_Mutex = xSemaphoreCreateMutex();
+  MB_Slave_Init_Registers(MB_Reg);
+  MB_Slave_Init_RTU(1, &huart6);
   //MB_Slave_Init_RTUs(1,1, &huart6);
 
 
@@ -461,50 +475,50 @@ void StartDefaultTask(void const * argument)
 
   /* USER CODE BEGIN 5 */
 
-  uint8_t buf[30];
-  MB_Exception_t ret;
-	
-  float_buf[0] = 1.111f;
-  float_buf[1] = 2.111f;
-  float_buf[2] = 3.111f;
-  float_buf[3] = 4.111f;
-  float_buf[49] = 50.111f;
-  float_buf[99] = 100.111f;
-
-  MB_Master_Handle_t mb_master;
-  MB_Master_Init_RTU(&mb_master, &huart6, 100, 3);
-	
-  while (true)
-  {
-//	  MB_Master_Read_Registers(&mb_master, 1,
-//							   MB_REG_INPUT, 0, 
-//							   buf, 2,
-//							   MB_RF_BIG_ENDIAN);
+//  uint8_t buf[30];
+//  MB_Exception_t ret;
+//	
+//  float_buf[0] = 1.111f;
+//  float_buf[1] = 2.111f;
+//  float_buf[2] = 3.111f;
+//  float_buf[3] = 4.111f;
+//  float_buf[49] = 50.111f;
+//  float_buf[99] = 100.111f;
+//
+//  MB_Master_Handle_t mb_master;
+//  MB_Master_Init_RTU(&mb_master, &huart6, 100, 3);
+//	
+//  while (true)
+//  {
+////	  MB_Master_Read_Registers(&mb_master, 1,
+////							   MB_REG_INPUT, 0, 
+////							   buf, 2,
+////							   MB_RF_BIG_ENDIAN);
+////  	
+////	  MB_Master_Read_Registers(&mb_master, 1,
+////							   MB_REG_INPUT, 1,
+////							   buf, 8,
+////							   MB_RF_BIG_ENDIAN);
+//
+//
+//	 ret = MB_Master_Write_Registers(&mb_master, 1,
+//							   MB_REG_HOLDING, 0,
+//							   float_buf, 400,
+//							   MB_RF_DATA, false);
 //  	
-//	  MB_Master_Read_Registers(&mb_master, 1,
-//							   MB_REG_INPUT, 1,
-//							   buf, 8,
-//							   MB_RF_BIG_ENDIAN);
-
-
-	 ret = MB_Master_Write_Registers(&mb_master, 1,
-							   MB_REG_HOLDING, 0,
-							   float_buf, 400,
-							   MB_RF_DATA, false);
-  	
-	  //osDelay(2000);
-
-	  ret = MB_Master_Write_Registers(&mb_master, 1,
-									  MB_REG_HOLDING, 2,
-									  float_buf, 4,
-									  MB_RF_DATA, false);
-
-	  ret = MB_Master_Read_Registers(&mb_master, 1,
-									 MB_REG_HOLDING, 0,
-									 &float_buf[10], 300,
-									 MB_RF_DATA);
-	  //osDelay(2000);
-  }
+//	  //osDelay(2000);
+//
+//	  ret = MB_Master_Write_Registers(&mb_master, 1,
+//									  MB_REG_HOLDING, 2,
+//									  float_buf, 4,
+//									  MB_RF_DATA, false);
+//
+//	  ret = MB_Master_Read_Registers(&mb_master, 1,
+//									 MB_REG_HOLDING, 0,
+//									 &float_buf[10], 300,
+//									 MB_RF_DATA);
+//	  //osDelay(2000);
+//  }
 
 	
   /* Infinite loop */

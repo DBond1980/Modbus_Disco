@@ -458,6 +458,9 @@
     <ClInclude Include="Modbus\mb_slave_reg.h">
       <Filter>Header files\Modbus</Filter>
     </ClInclude>
+    <ClInclude Include="data_structs.h">
+      <Filter>Header files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="Tasks.txt" />
